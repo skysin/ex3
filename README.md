@@ -1,5 +1,7 @@
 # ex3
-Computer Internet Principles ex3
-###### weixin like program
-###### server linux
-###### client all
+
+ps: Computer Internet Principles Experiment3
+
+server need to run in linux system
+
+client need to run in all system(win/mac/linux)

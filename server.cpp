@@ -8,6 +8,8 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <fstream>
+#include <algorithm>
 
 #define MAX_THREAD_NUM 100
 #define BACKLOG 20
@@ -23,6 +25,7 @@ struct User{
     string password;
     vector<string> friends;
     vector<string> msg;
+    vector<string> filename;
     bool online;
     int socket;
     User(string na, string pa){
@@ -189,6 +192,13 @@ class Server{
                             cout << i  <<" " << all[i].username << " " << all[i].socket << endl;
                             if(all[i].socket == conn_socket){
                                 all[i].friends.push_back(tar);
+                                //all[i].friends.unique();
+                                //sort(v.begin(),v.end());
+                                //v.erase(unique(v.begin(), v.end()), v.end());
+                                sort(all[i].friends.begin(), all[i].friends.end());
+                                all[i].friends.erase(unique(all[i].friends.begin(), all[i].friends.end()), all[i].friends.end());
+                                
+                            
                                 flag = true;
                             }
                         }
@@ -214,10 +224,17 @@ class Server{
                                 }
                             }
                         }
-                        char ch[ua.size()];
-                        sprintf(ch, "%s", ua.c_str());  
-                        if(write(conn_socket, ch, strlen(ch)) == -1){
-                            cout << "ls error" << endl;
+                        if(ua.size() > 0){
+                            char ch[ua.size()];
+                            sprintf(ch, "%s", ua.c_str());  
+                            if(write(conn_socket, ch, strlen(ch)) == -1){
+                                cout << "ls error" << endl;
+                            }
+                        }
+                        else{
+                            if(write(conn_socket, "None", strlen("None")) == -1){
+                                cout << "ls error" << endl;
+                            }
                         }
                     }
 
@@ -269,6 +286,62 @@ class Server{
                         }
                     }
 
+                    if(strcmp(ord, "sendfile") == 0){
+                        cout << "sendfile " << to_friend << endl;
+                        char* first = strtok(NULL, delim);
+                        string tar(first);
+                        string from = "";
+                        cout << tar << endl;
+                        int begin = 0;
+                        for (int i = tar.size(); i >= 0; i --){
+                            //cout << (int)first[i] << endl;
+                            if((int)first[i] == 47){
+                                begin = i;
+                                break;
+                            }
+                        }
+                        tar = tar.substr(begin + 1, tar.size());
+                        cout << tar << endl;
+                        for (int i = 0; i < all.size(); i ++){
+                            if(all[i].socket == conn_socket){
+                                from = all[i].username;
+                                break;
+                            }
+                        }
+                        for (int i = 0; i < all.size(); i ++){
+                            if(all[i].username == to_friend){
+                                all[i].filename.push_back(tar);
+                            }
+                        }
+
+                        // write file
+                        ofstream out;
+                        string tmp_fn = "./serverfile/" + tar;
+                        cout << tmp_fn << endl;
+                        out.open(tmp_fn, ios::binary);
+
+                        if(out.is_open()){
+                            char fbuffer[BUFFER_SIZE];
+                            memset(fbuffer, 0, BUFFER_SIZE);
+                            while(read(conn_socket, fbuffer, BUFFER_SIZE) > 0){
+                                cout << fbuffer << "　" << strlen(fbuffer) << endl;
+                                if(strcmp(fbuffer, "--EOF--") == 0){
+                                    break;
+                                }
+                                else{
+                                    out << fbuffer;
+                                    memset(fbuffer, 0, BUFFER_SIZE);
+                                }
+                            }
+                            cout << "file write end" << endl;
+                        }
+                        else{
+                            cout << "open file wrong" << endl;
+                        }
+                        out.close();
+                        cout << "end file" << endl;
+                    }
+
                     if(strcmp(ord, "recvmsg") == 0){
                         string ua = "";
                         cout << "recvmsg" << endl;
@@ -287,6 +360,63 @@ class Server{
                         if(write(conn_socket, ch, strlen(ch)) == -1){
                             cout << "recvmsg error" << endl;
                         }
+                    }
+
+                    if(strcmp(ord, "recvfile") == 0){
+                        cout << "recvfile" << endl;
+                        for (int i = 0; i < all.size(); i ++){
+                            if(all[i].socket == conn_socket){
+                                cout << "receiver " << all[i].username << endl;
+                                for (int j = 0; j < all[i].filename.size(); j ++){
+                                    string tmp_fn = all[i].filename[j];
+
+                                    char ch[tmp_fn.size()];
+                                    sprintf(ch, "%s", tmp_fn.c_str());  
+                                    if(write(conn_socket, ch, strlen(ch)) == -1){
+                                        cout << "profile error" << endl;
+                                    }
+                                    sleep(5);
+
+                                    tmp_fn = "./serverfile/" + all[i].filename[j];
+                                    cout << tmp_fn << endl;
+                                    
+                                    ifstream in(tmp_fn, ios::in|ios::binary);
+                                    
+                                    char fbuffer[BUFFER_SIZE];
+                                    memset(fbuffer, 0, BUFFER_SIZE);
+                                    
+                                    if(in.is_open()){
+                                        cout << "in end" << endl;
+                                        while(!in.eof()){
+                                            in.read(fbuffer, BUFFER_SIZE);
+                                            cout << fbuffer << " " << strlen(fbuffer) << endl;
+                                            if(write(conn_socket, fbuffer, strlen(fbuffer)) == -1){
+                                                cout << "fwrite error" << endl;
+                                            }
+                                            memset(fbuffer, 0, BUFFER_SIZE);
+                                        }
+                                        sleep(5);
+                                        if(write(conn_socket, "--EOF--", strlen("--EOF--")) == -1){
+                                            cout << "fwrite error" << endl;
+                                        }
+                                        in.close();
+                                    }
+                                    else{
+                                        cout << tmp_fn << " open error" << endl;
+                                    }
+                                }
+                                all[i].filename.clear();
+                            }
+                        }
+                        sleep(5);
+                        if(write(conn_socket, "**end**", strlen("**end**")) == -1){
+                            cout << "fwrite error" << endl;
+                        }
+                        cout << "recvfile end" << endl;
+                    }
+
+                    if(strcmp(ord, "sync") == 0){
+                        cout << "sync receive" << endl;
                     }
                 }
             
